@@ -1,0 +1,17 @@
+# Training dependencies (CPU-only).
+#
+# Resolve torch/torchvision from PyTorch's CPU index. Without this, pip pulls
+# the default PyPI wheel, which bundles the CUDA runtime (nvidia-* packages)
+# and adds several GB to the image for no benefit on a CPU-only build.
+--index-url https://download.pytorch.org/whl/cpu
+--extra-index-url https://pypi.org/simple
+
+torch==2.13.0
+torchvision==0.28.0
+
+# Config parsing in src/train.py
+pyyaml==6.0.3
+
+# Pulled in by torchvision; pinned so builds stay reproducible.
+numpy==2.4.6
+pillow==12.3.0
