@@ -1,0 +1,19 @@
+# Inference-only dependencies.
+#
+# Deliberately excludes training tooling (tensorboard, pyyaml, etc.) — src/serve.py
+# is configured entirely through environment variables, so it never parses YAML.
+--index-url https://download.pytorch.org/whl/cpu
+--extra-index-url https://pypi.org/simple
+
+torch==2.13.0
+torchvision==0.28.0
+
+# API layer
+fastapi==0.141.1
+uvicorn==0.52.4
+# Required for FastAPI to accept the multipart upload from `curl -F image=@...`
+python-multipart==0.0.32
+
+# Image decoding / tensor conversion
+pillow==12.3.0
+numpy==2.4.6
