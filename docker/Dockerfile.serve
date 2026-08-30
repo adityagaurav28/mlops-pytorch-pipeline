@@ -1,0 +1,53 @@
+# syntax=docker/dockerfile:1
+#
+# Serving image — inference only.
+#
+# requirements/serve.txt deliberately omits training tooling (tensorboard,
+# pyyaml): serve.py is configured entirely through environment variables.
+
+# ---------- Stage 1: builder ----------
+FROM python:3.11-slim AS builder
+
+WORKDIR /app
+
+COPY requirements/serve.txt .
+
+RUN pip install --no-cache-dir --prefix=/install -r serve.txt
+
+# ---------- Stage 2: serving runtime ----------
+FROM python:3.11-slim AS serving
+
+WORKDIR /app
+
+COPY --from=builder /install /usr/local
+
+# Only what inference needs. dataset.py and train.py are left out — serve.py
+# imports nothing from them.
+COPY src/serve.py src/model.py ./src/
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    CHECKPOINT_PATH=/app/checkpoints/classifier_v1.pt \
+    MODEL_ARCH=simple_cnn \
+    NUM_CLASSES=10
+
+# Non-root. The high, explicit UID is what a Kubernetes securityContext
+# (runAsUser / fsGroup) references so the pod can read the checkpoint PVC.
+RUN useradd --create-home --uid 10001 appuser \
+    && mkdir -p /app/checkpoints \
+    && chown -R appuser:appuser /app
+
+USER appuser
+
+EXPOSE 8080
+
+# python:3.11-slim ships no curl or wget, so probe with the interpreter that is
+# already here rather than adding an apt layer for one instruction. urlopen
+# raises on a 503, hence the try/except — an uncaught traceback would exit 1
+# anyway, but this keeps the intent explicit.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+    CMD python -c "import urllib.request as u, sys; \
+sys.exit(0 if u.urlopen('http://localhost:8080/health', timeout=4).status == 200 else 1)" \
+    || exit 1
+
+CMD ["python", "src/serve.py"]
