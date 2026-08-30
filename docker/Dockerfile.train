@@ -1,0 +1,46 @@
+# syntax=docker/dockerfile:1
+#
+# Training image — multi-stage.
+#
+# Stage 1 installs the pinned dependencies into an isolated prefix; stage 2
+# starts from a clean slim base and copies only that prefix in. Building
+# "FROM base" instead would inherit pip's caches and metadata, so the second
+# stage would be no smaller than the first and the split would buy nothing.
+
+# ---------- Stage 1: builder ----------
+FROM python:3.11-slim AS builder
+
+WORKDIR /app
+
+# Copied on its own so the (slow, ~1GB) dependency layer is cached and only
+# reinstalled when train.txt itself changes — not on every source edit.
+COPY requirements/train.txt .
+
+# requirements/train.txt pins the PyTorch CPU index, which keeps the CUDA
+# runtime (several GB of nvidia-* wheels) out of a CPU-only image.
+RUN pip install --no-cache-dir --prefix=/install -r train.txt
+
+# ---------- Stage 2: training runtime ----------
+FROM python:3.11-slim AS training
+
+WORKDIR /app
+
+# /usr/local/lib/python3.11/site-packages is already on sys.path.
+COPY --from=builder /install /usr/local
+
+COPY src/ ./src/
+COPY configs/ ./configs/
+
+# Unbuffered so the JSON-lines metrics stream out live under
+# `docker logs` / `kubectl logs` instead of sitting in a 4KB buffer.
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    CONFIG_PATH=/app/configs/training_config.yaml
+
+# Mount points for the dataset and the checkpoint output. Created here so they
+# exist with sane ownership even when nothing is mounted over them.
+RUN mkdir -p /app/data /app/checkpoints
+
+# WORKDIR is /app, so sys.path[0] becomes /app/src and the flat imports in
+# train.py (`from model import get_model`) resolve.
+ENTRYPOINT ["python", "src/train.py"]

@@ -1,0 +1,22 @@
+# Everything here is excluded from the build context that gets sent to the
+# Docker daemon. Without this, `docker build .` uploads the CIFAR-10 archive
+# and every saved checkpoint on every build.
+.git/
+.github/
+data/
+checkpoints/
+env/
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.pt
+*.pth
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+tests/
+k8s/
+README.md
+assignment.pdf
+.DS_Store
